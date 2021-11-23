@@ -11,39 +11,27 @@ import sys
 import re
 from PyPDF2 import PdfFileWriter, PdfFileReader
 
-# Add the specified pages from the input pdf
-def add_pages(pages, input_pdf, page_numbers, append):
-    # Add the pages from this file to the list
-    print ("Mode: " + "Append" if append else "Interleave")
-    if (append):
-        # Simply add the new pages onto the end of the list
-        for page_number in page_numbers:
-            outputPdfPages.append(sourcePdf.getPage(page_number))
-    else:
-        # Interleave the pages into the existing array, starting AFTER the first existing item.
-        # The first page is page 0, so we will insert odd-numbered pages.
-        insertPosition = 1
-        for page_number in page_numbers:
-            pages.insert(insertPosition, sourcePdf.getPage(page_number))
-            insertPosition = insertPosition + 2
-
 # We need at least two parameters - an output file and an input file
 if len(sys.argv) < 3 or "--help" in sys.argv or "-h" in sys.argv:
     print("""Splice PDF files
 
-usage: {0} OUTFILE FILE1 [PAGES] [PAGES...] [ FILE2 [=] [PAGES] [PAGES...] ...]
+usage: {0} OUTFILE FILE1 [ROTATION] [PAGES] [ROTATION] [PAGES...] [ FILE2 [=] [ROTATION] [PAGES] [ROTATION] [PAGES...] ...]
+
+ROTATION can be R0 (no rotation), R90 (90 deg clockwise), R180 or R-180 (180 degrees), R270 or R-90 (270 deg clockwise or 90deg anti-clockwise) and applies to all subsequent pages from the source file. Note that a page can only appear in the ouput with a single rotation.
 
 PAGES can be a single page (e.g. 7) or a range (e.g. 2-5 7- -11)
+
+To interleave pages from a second (or later) file, for example to reassemble a set of front-side and rear-side scans, specify = after the filename.
 
 Examples:
   {0} out.pdf input1.pdf 1-5 10 20-
   Create out.pdf from input1.pdf pages 1-5, 10 and 20 onwards
 
-  {0} out.pdf input1.pdf 1-5 input2.pdf 2-
-  Create out.pdf from input1.pdf pages 1-5 followed by input2.pdf pages 2 onwards
+  {0} out.pdf input1.pdf 1-5 input2.pdf R90 2-2 R0 3-
+  Create out.pdf from input1.pdf pages 1-5 followed by input2.pdf pages 2-3, rotated 90deg clockwise, and pages 3 onwards, not rotated.
 
-  {0} out.pdf input1.pdf input2.pdf =
-  Create out.pdf by interleaving input1.pdf and input2.pdf, page by page
+  {0} out.pdf fronts.pdf rears.pdf =
+  Create out.pdf by interleaving fronts.pdf and rears.pdf, page by page
 """.format(sys.argv[0]))
     exit(1)
 
@@ -83,6 +71,7 @@ for section in sourceSections:
 
     append = True # Default behaviour
     pageNumbers = []
+    rotation = 0
 
     # Each remaining item is either a mix spec or a page specification
     for arg in section:
@@ -90,8 +79,8 @@ for section in sourceSections:
         if "=" == arg:
             append = False
         # If the argument is a single page number, e.g. "7"
-        elif re.search("^(\d+)$", arg):
-            match = re.search("(\d+)", arg)
+        elif re.match("^\d+$", arg):
+            match = re.match("^(\d+)$", arg)
             pageNumber = int(match.group(1))
             # Sanity checks
             if not sourcePdf:
@@ -101,12 +90,16 @@ for section in sourceSections:
                 print("Invalid page number %d: document has %d pages." % (pageNumber, sourcePdf.numPages))
                 exit(30)
             # Start counting at 0
-            print("Page %d" % pageNumber)
-            pageNumbers.append(pageNumber-1)
+            print("Page %d, rotation %d" % (pageNumber, rotation))
+            pageNumbers.append((pageNumber-1, rotation))
+        # If a rotation is specified
+        elif re.match("^R\-?\d+$", arg):
+            match = re.match("^R(\-?\d+)", arg)
+            rotation = int(match.group(1))
         # If the argument(s) is a range page specifier, e.g. 1-7
-        elif re.search("(\d*)\-(\d*)", arg):
+        elif re.search("^\d*\-\d*$", arg):
             # Get the numeric values, if any
-            matches = re.search("(\d*)\-(\d*)", arg)
+            matches = re.search("^(\d*)\-(\d*)$", arg)
             start = matches.group(1)
             end = matches.group(2)
             # If a value is omitted, use first or last page
@@ -122,12 +115,14 @@ for section in sourceSections:
             end = min(sourcePdf.numPages, end)
 
             # Get the range. Note that humans number pages starting at 1, but PDF numbers them starting at 0
-            print("Pages %d - %d" % (start, end))
+            print("Pages %d - %d, rotation %d" % (start, end, rotation))
             if end < start:
                 # Allow us to reverse the order of a range of pages, e.g. 7-3
-                pageNumbers.extend(range(start-1, end-2, -1))
+                for p in range(start-1, end-2, -1):
+                    pageNumbers.append((p, rotation))
             else:
-                pageNumbers.extend(range(start-1, end))
+                for p in range(start-1, end):
+                    pageNumbers.append((p, rotation))
         else:
             print("Unexpected argument %s" % arg)
             exit(50)
@@ -135,10 +130,30 @@ for section in sourceSections:
     # If we did not specify any pages, use all of them
     if not pageNumbers:
         print("No pages specified. Using all pages.")
-        pageNumbers = range(0, sourcePdf.numPages)
+        for p in range(0, sourcePdf.numPages):
+            pageNumbers.append((p, rotation))
 
     # We now know everything to retrieve from this file.
-    add_pages(outputPdfPages, sourcePdf, pageNumbers, append)
+    # Add the specified pages from the input pdf
+    print ("Mode: " + "Append" if append else "Interleave")
+    increment = 2 if append else 1
+    insertPosition = 1 if append else 0
+    for page_number, rotation in pageNumbers:
+        page = sourcePdf.getPage(page_number)
+        if rotation == 0:
+            pass
+        elif rotation == 90:
+            page.rotateClockwise(90)
+        elif rotation == 180 or rotation == -180:
+            page.rotateClockwise(180)
+        elif rotation == 270 or rotation == -90:
+            page.rotateCounterClockwise(90)
+        else:
+            print("Invalid rotation: %d" % rotation)
+
+        outputPdfPages.insert(insertPosition, page)
+
+        insertPosition += increment
 
 # We have finished reading stuff.  Now compile a PDF from the array of pages.
 outputPdf = PdfFileWriter()
