@@ -17,9 +17,13 @@ if len(sys.argv) < 3 or "--help" in sys.argv or "-h" in sys.argv:
 
 usage: {0} OUTFILE FILE1 [ROTATION] [PAGES] [ROTATION] [PAGES...] [ FILE2 [=] [ROTATION] [PAGES] [ROTATION] [PAGES...] ...]
 
+       {0} OUTFILE FILE1 SPREADFIX
+
 ROTATION can be R0 (no rotation), R90 (90 deg clockwise), R180 or R-180 (180 degrees), R270 or R-90 (270 deg clockwise or 90deg anti-clockwise) and applies to all subsequent pages from the source file. Note that a page can only appear in the ouput with a single rotation.
 
 PAGES can be a single page (e.g. 7) or a range (e.g. 2-5 7- -11)
+
+SPREADFIX reassembles (reorders and rotates) a scanned booklet from "printer spread" order, which must already have been split into individual pages. (Google 'briss' tool for the splitting.)
 
 To interleave pages from a second (or later) file, for example to reassemble a set of front-side and rear-side scans, specify = after the filename.
 
@@ -32,6 +36,9 @@ Examples:
 
   {0} out.pdf fronts.pdf rears.pdf =
   Create out.pdf by interleaving fronts.pdf and rears.pdf, page by page
+
+  {0} out.pdf scan1_split.pdf SPREADFIX
+  Restructure a pre-split scan in "printer spread" order, into normal reading order.  
 """.format(sys.argv[0]))
     exit(1)
 
@@ -39,9 +46,39 @@ Examples:
 outfile_name = sys.argv[1]
 print("Generating %s" % outfile_name)
 
+remainingArgs = sys.argv[2:]
+
+# If we are in "spreadfix" mode, generate our own set of arguments
+if len(sys.argv)==4 and sys.argv[3].upper()=="SPREADFIX":
+    # Get the number of pages in the source file
+    filename = sys.argv[2]
+    tempReader = PdfFileReader(filename)
+    numPages = tempReader.numPages
+    tempReader = None
+
+    # Page count must be a multiple of 4
+    if (numPages % 4):
+        print("Source file page count %d must be a multiple of 4" % numPages)
+        exit(2)
+
+    remainingArgs = [filename]
+
+    # The page order (for e.g. a 36 page book) is 35, 33, 31 ... 1, 2, 4, 6 ... 36.
+    # Because of the printer layout, rotation switches after each page, except between 1 and 2.
+    # (Proper explanation of this is too complicated -- draw it out on paper.)
+    rotation = 90
+    for page in range (numPages-1, 0, -2):
+        remainingArgs.append("R%d" % rotation)
+        remainingArgs.append(str(page))
+        rotation = -rotation
+    rotation = -rotation
+    for page in range (2, numPages+1, 2):
+        remainingArgs.append("R%d" % rotation)
+        remainingArgs.append(str(page))
+        rotation = -rotation
+
 # Split the remaining parameters into sets, each starting with a file.
 # Do this by seeing which are extant files.
-remainingArgs = sys.argv[2:]
 sourceSections = []
 while remainingArgs:
     section = []
