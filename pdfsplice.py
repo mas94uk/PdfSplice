@@ -9,7 +9,7 @@
 import os
 import sys
 import re
-from PyPDF2 import PdfFileWriter, PdfFileReader
+from PyPDF2 import PdfWriter, PdfReader
 
 # We need at least two parameters - an output file and an input file
 if len(sys.argv) < 3 or "--help" in sys.argv or "-h" in sys.argv:
@@ -52,8 +52,8 @@ remainingArgs = sys.argv[2:]
 if len(sys.argv)==4 and sys.argv[3].upper()=="SPREADFIX":
     # Get the number of pages in the source file
     filename = sys.argv[2]
-    tempReader = PdfFileReader(filename)
-    numPages = tempReader.numPages
+    tempReader = PdfReader(filename)
+    numPages = len(tempReader.pages)
     tempReader = None
 
     # Page count must be a multiple of 4
@@ -104,7 +104,7 @@ for section in sourceSections:
     filename = section.pop(0)
     print("Input file: %s" % filename)
     infile = open(filename, "rb")
-    sourcePdf = PdfFileReader(infile)
+    sourcePdf = PdfReader(infile)
 
     append = True # Default behaviour
     pageNumbers = []
@@ -116,8 +116,8 @@ for section in sourceSections:
         if "=" == arg:
             append = False
         # If the argument is a single page number, e.g. "7"
-        elif re.match("^\d+$", arg):
-            match = re.match("^(\d+)$", arg)
+        elif re.match("^\\d+$", arg):
+            match = re.match("^(\\d+)$", arg)
             pageNumber = int(match.group(1))
             # Sanity checks
             if not sourcePdf:
@@ -130,26 +130,26 @@ for section in sourceSections:
             print("Page %d, rotation %d" % (pageNumber, rotation))
             pageNumbers.append((pageNumber-1, rotation))
         # If a rotation is specified
-        elif re.match("^R\-?\d+$", arg):
-            match = re.match("^R(\-?\d+)", arg)
+        elif re.match("^R\\-?\\d+$", arg):
+            match = re.match("^R(\\-?\\d+)", arg)
             rotation = int(match.group(1))
         # If the argument(s) is a range page specifier, e.g. 1-7
-        elif re.search("^\d*\-\d*$", arg):
+        elif re.search("^\\d*\\-\\d*$", arg):
             # Get the numeric values, if any
-            matches = re.search("^(\d*)\-(\d*)$", arg)
+            matches = re.search("^(\\d*)\\-(\\d*)$", arg)
             start = matches.group(1)
             end = matches.group(2)
             # If a value is omitted, use first or last page
             if start=="":
                 start = 1
             if end=="":
-                end = sourcePdf.numPages
+                end = len(sourcePdf.pages)
             start = int(start)
             start = max(1,start)
 
             # Don't allow pages before the start or after the end
             end = int(end)
-            end = min(sourcePdf.numPages, end)
+            end = min(len(sourcePdf.pages), end)
 
             # Get the range. Note that humans number pages starting at 1, but PDF numbers them starting at 0
             print("Pages %d - %d, rotation %d" % (start, end, rotation))
@@ -167,7 +167,7 @@ for section in sourceSections:
     # If we did not specify any pages, use all of them
     if not pageNumbers:
         print("No pages specified. Using all pages.")
-        for p in range(0, sourcePdf.numPages):
+        for p in range(0, len(sourcePdf.pages)):
             pageNumbers.append((p, rotation))
 
     # We now know everything to retrieve from this file.
@@ -176,7 +176,7 @@ for section in sourceSections:
     increment = 2 if append else 1
     insertPosition = 1 if append else 0
     for page_number, rotation in pageNumbers:
-        page = sourcePdf.getPage(page_number)
+        page = sourcePdf.pages[page_number]
         if rotation == 0:
             pass
         elif rotation == 90:
@@ -193,9 +193,9 @@ for section in sourceSections:
         insertPosition += increment
 
 # We have finished reading stuff.  Now compile a PDF from the array of pages.
-outputPdf = PdfFileWriter()
+outputPdf = PdfWriter()
 for outputPdfPage in outputPdfPages:
-    outputPdf.addPage(outputPdfPage)
+    outputPdf.add_page(outputPdfPage)
 
 # Write the generated PDF to disk
 with open(outfile_name, "wb") as out:
