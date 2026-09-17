@@ -38,7 +38,11 @@ Examples:
   Create out.pdf by interleaving fronts.pdf and rears.pdf, page by page
 
   {0} out.pdf scan1_split.pdf SPREADFIX
-  Restructure a pre-split scan in "printer spread" order, into normal reading order.  
+  Restructure a pre-split scan in "printer spread" order, into normal reading order.
+  
+  {0} out.pdf fronts.pdf backs.pdf = 5-1
+  Given files containing the separately-scanned fronts and backs of a document, reverse backs.pdf and interleave the two files to restore the original page order.
+  Ideal for when using a single-sided sheet-feed scanner to scan double-sided documents.
 """.format(sys.argv[0]))
     exit(1)
 
@@ -127,7 +131,7 @@ for section in sourceSections:
                 print("Invalid page number %d: document has %d pages." % (pageNumber, sourcePdf.numPages))
                 exit(30)
             # Start counting at 0
-            print("Page %d, rotation %d" % (pageNumber, rotation))
+            print(" Page %d, rotation %d" % (pageNumber, rotation))
             pageNumbers.append((pageNumber-1, rotation))
         # If a rotation is specified
         elif re.match("^R\\-?\\d+$", arg):
@@ -152,7 +156,7 @@ for section in sourceSections:
             end = min(len(sourcePdf.pages), end)
 
             # Get the range. Note that humans number pages starting at 1, but PDF numbers them starting at 0
-            print("Pages %d - %d, rotation %d" % (start, end, rotation))
+            print(" Pages %d - %d, rotation %d" % (start, end, rotation))
             if end < start:
                 # Allow us to reverse the order of a range of pages, e.g. 7-3
                 for p in range(start-1, end-2, -1):
@@ -166,15 +170,15 @@ for section in sourceSections:
 
     # If we did not specify any pages, use all of them
     if not pageNumbers:
-        print("No pages specified. Using all pages.")
+        print(" No pages specified. Using all pages.")
         for p in range(0, len(sourcePdf.pages)):
             pageNumbers.append((p, rotation))
 
     # We now know everything to retrieve from this file.
     # Add the specified pages from the input pdf
-    print ("Mode: " + "Append" if append else "Interleave")
-    increment = 2 if append else 1
-    insertPosition = 1 if append else 0
+    print (f" Mode: {"Append" if append else "Interleave"}")
+    increment = 1 if append else 2
+    insertPosition = len(outputPdfPages) if append else 1
     for page_number, rotation in pageNumbers:
         page = sourcePdf.pages[page_number]
         if rotation == 0:
@@ -186,8 +190,9 @@ for section in sourceSections:
         elif rotation == 270 or rotation == -90:
             page.rotateCounterClockwise(90)
         else:
-            print("Invalid rotation: %d" % rotation)
+            print(" Invalid rotation: %d" % rotation)
 
+        print(f" Inserting page {page_number} at position {insertPosition} of {len(outputPdfPages)}")
         outputPdfPages.insert(insertPosition, page)
 
         insertPosition += increment
