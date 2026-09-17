@@ -40,7 +40,7 @@ Examples:
   {0} out.pdf scan1_split.pdf SPREADFIX
   Restructure a pre-split scan in "printer spread" order, into normal reading order.
   
-  {0} out.pdf fronts.pdf backs.pdf = 5-1
+  {0} out.pdf fronts.pdf backs.pdf REASSEMBLE
   Given files containing the separately-scanned fronts and backs of a document, reverse backs.pdf and interleave the two files to restore the original page order.
   Ideal for when using a single-sided sheet-feed scanner to scan double-sided documents.
 """.format(sys.argv[0]))
@@ -80,6 +80,21 @@ if len(sys.argv)==4 and sys.argv[3].upper()=="SPREADFIX":
         remainingArgs.append("R%d" % rotation)
         remainingArgs.append(str(page))
         rotation = -rotation
+
+# If we are in "reassemble" mode, generate our own set of arguments
+if len(sys.argv)==5 and sys.argv[4].upper()=="REASSEMBLE":
+    # Get the number of pages in the source files
+    lengths = []
+    for filename in sys.argv[2:4]:
+        tempReader = PdfReader(filename)
+        lengths.append(len(tempReader.pages))
+    if lengths[0] != lengths[1]:
+        print("Both source PDFs must have the same number of pages")
+        exit(3)
+    
+    # We want to add all pages from the first PDF, then interleave all pages from the second PDF in reverse order:
+    # e.g. "fronts.pdf backs.pdf 5-1 ="
+    remainingArgs = [sys.argv[2], sys.argv[3], f"{lengths[0]}-1", "="]
 
 # Split the remaining parameters into sets, each starting with a file.
 # Do this by seeing which are extant files.
