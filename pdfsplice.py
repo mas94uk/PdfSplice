@@ -142,8 +142,8 @@ for section in sourceSections:
             if not sourcePdf:
                 print("Must specify an input PDF before a page number")
                 exit(20)
-            if pageNumber < 1 or pageNumber > sourcePdf.numPages:
-                print("Invalid page number %d: document has %d pages." % (pageNumber, sourcePdf.numPages))
+            if pageNumber < 1 or pageNumber > len(sourcePdf.pages):
+                print("Invalid page number %d: document has %d pages." % (pageNumber, len(sourcePdf.pages)))
                 exit(30)
             # Start counting at 0
             print(" Page %d, rotation %d" % (pageNumber, rotation))
